@@ -7,7 +7,11 @@ const cors = require('cors');
 const app = express();
 
 // خلال التطوير يمكن السماح للجميع، وفي الإنتاج قَيِّد origin إلى نطاق واجهتك
-app.use(cors()); // راجع توثيق CORS في Express لضبط الخيارات لاحقًا
+app.use(cors({
+  origin: true, // يسمح لكل المواقع مؤقتاً
+  credentials: true
+}));
+ // راجع توثيق CORS في Express لضبط الخيارات لاحقًا
 app.use(express.json());
 
 // عدّل سلسلة الاتصال عند النشر (يفضَّل MongoDB Atlas عبر متغير بيئة)
