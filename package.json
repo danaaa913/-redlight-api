@@ -4,15 +4,16 @@
   "description": "RedLight AI - Government Integrity Monitoring System",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
     "mongoose": "^7.5.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
-    "node-fetch": "^2.6.7"
+    "node-fetch": "^2.6.7",
+    "bcrypt": "^5.1.0",
+    "jsonwebtoken": "^9.0.0"
   },
   "engines": {
     "node": ">=14.0.0"
