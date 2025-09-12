@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>خريطة المؤسسات الحكومية الأردنية - RedLight AI</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    body, html { margin:0; padding:0; height:100%; font-family:sans-serif; }
+    /* صفحة البداية */
+    #landing {
+      position:absolute; top:0; left:0; width:100%; height:100%;
+      background:#2c3e50; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; text-align:center; color:#fff; z-index:2000;
+    }
+    #landing h1 { font-size:48px; margin:0; }
+    #landing h1 .red { color:#e74c3c; }
+    #landing p.tagline { margin:15px 0 30px; font-size:20px; max-width:600px; }
+    #start-button {
+      padding:15px 30px; font-size:24px; background-color:#e74c3c; color:#fff;
+      border:none; border-radius:6px; cursor:pointer; box-shadow:0 4px 8px rgba(0,0,0,0.3);
+    }
+    /* شريط البحث */
+    #search-bar {
+      position:absolute; top:10px; left:50%; transform:translateX(-50%);
+      z-index:1000; width:90%; max-width:600px; display:flex; background:rgba(255,255,255,0.9);
+      border-radius:4px; box-shadow:0 2px 6px rgba(0,0,0,0.3);
+    }
+    #search-input {
+      flex:1; padding:10px 15px; border:1px solid #ccc; border-radius:4px 0 0 4px; font-size:16px; outline:none;
+    }
+    #search-button {
+      padding:10px 20px; background-color:#0077cc; color:#fff; border:none; border-radius:0 4px 4px 0; cursor:pointer; font-size:16px;
+    }
+    /* الخريطة */
+    #map { height:100%; width:100%; }
+    /* صندوق الملاحظات */
+    #feedback-modal {
+      position:fixed; top:0; left:0; width:100%; height:100%;
+      background:rgba(0,0,0,0.5); display:none; align-items:center; justify-content:center; z-index:1500;
+    }
+    #feedback-box {
+      background:#fff; padding:20px; border-radius:6px; width:90%; max-width:500px;
+      box-shadow:0 4px 8px rgba(0,0,0,0.3); text-align:center;
+    }
+    #feedback-box h3 { margin-top:0; font-size:20px; }
+    #feedback-text {
+      width:100%; height:120px; margin:15px 0; padding:10px; font-size:16px;
+      border:1px solid #ccc; border-radius:4px; resize:vertical;
+    }
+    #feedback-submit, #feedback-cancel {
+      padding:10px 20px; font-size:16px; border:none; border-radius:4px; cursor:pointer; margin:5px;
+    }
+    #feedback-submit { background:#0077cc; color:#fff; }
+    #feedback-cancel { background:#ccc; }
+  </style>
+</head>
+<body>
+  <!-- صفحة البداية -->
+  <div id="landing">
+    <h1>أهلاً وسهلاً بك في <span class="red">RedLight AI</span></h1>
+    <p class="tagline">"الصمت لا يعني الرضى بل إنذار مبكر"</p>
+    <button id="start-button">ابدأ الاستكشاف</button>
+  </div>
+
+  <!-- شريط البحث والخريطة -->
+  <div id="search-bar" style="display:none;">
+    <input id="search-input" type="text" placeholder="ابحث عن المؤسسة الحكومية..." />
+    <button id="search-button">بحث</button>
+  </div>
+  <div id="map" style="display:none;"></div>
+
+  <!-- صندوق الملاحظات -->
+  <div id="feedback-modal">
+    <div id="feedback-box">
+      <h3 id="feedback-title">شارك تجربتك مع ...</h3>
+      <textarea id="feedback-text" placeholder="اكتب تجربتك هنا"></textarea>
+      <div>
+        <button id="feedback-submit">إرسال</button>
+        <button id="feedback-cancel">إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    let map, markers = [], currentInstitution = '';
+
+    // غيّر هذا لاحقًا إلى رابط خادمك الفعلي مع تمكين CORS
+    const USE_HTTPBIN = false; // اجعله false عند الجاهزية
+    const API_BASE = USE_HTTPBIN ? 'https://redlight-api.onrender.com' : ''; // ضع هنا دومين API مثل: https://api.yourdomain.com
+
+    function initMap() {
+      map = L.map('map').setView([31.9454,35.9284],7);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+        attribution:'© OpenStreetMap'
+      }).addTo(map);
+
+      const institutions = [
+        { name:'رئاسة الوزراء', coords:[31.9539,35.9106] },
+        { name:'وزارة الداخلية', coords:[31.9522,35.9106] },
+        { name:'وزارة العدل', coords:[31.9619,35.9284] },
+        { name:'وزارة التربية والتعليم', coords:[31.9336,35.8681] },
+        { name:'وزارة الصحة', coords:[31.9622,35.8846] },
+        { name:'وزارة المالية', coords:[31.9466,35.9321] }
+      ];
+
+      markers = institutions.map(inst => {
+        const m = L.marker(inst.coords).addTo(map);
+        m.bindPopup(
+          `<strong>${inst.name}</strong><br>` +
+          `<button onclick="openFeedbackForm('${inst.name}')">شارك تجربتك</button>`
+        );
+        return { name: inst.name, marker: m };
+      });
+    }
+
+    document.getElementById('start-button').addEventListener('click', () => {
+      document.getElementById('landing').style.display = 'none';
+      document.getElementById('search-bar').style.display = 'flex';
+      document.getElementById('map').style.display = 'block';
+      initMap();
+    });
+
+    function performSearch() {
+      const q = document.getElementById('search-input').value.trim();
+      if (!q) return;
+      const found = markers.find(m => m.name.includes(q));
+      if (found) {
+        map.setView(found.marker.getLatLng(),13);
+        found.marker.openPopup();
+      } else {
+        alert('لم يتم العثور على المؤسسة المطلوبة');
+      }
+    }
+    document.getElementById('search-button').addEventListener('click', performSearch);
+    document.getElementById('search-input').addEventListener('keyup', e => { if (e.key==='Enter') performSearch(); });
+
+    function openFeedbackForm(name) {
+      currentInstitution = name;
+      document.getElementById('feedback-title').textContent = `شارك تجربتك مع ${name}`;
+      document.getElementById('feedback-text').value = '';
+      document.getElementById('feedback-modal').style.display = 'flex';
+    }
+
+    document.getElementById('feedback-submit').addEventListener('click', () => {
+      const t = document.getElementById('feedback-text').value.trim();
+      if (!t) { alert('يرجى كتابة تجربتك أولاً'); return; }
+
+      const url = USE_HTTPBIN ? `${API_BASE}/post` : `/api/feedback`; // عند الجاهزية اجعل USE_HTTPBIN=false
+      const payload = {
+        institutionName: currentInstitution,
+        timestamp: new Date().toISOString(),
+        text: t
+      };
+
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      .then(res => {
+        if (!res.ok) throw new Error('فشل في إرسال التجربة');
+        return res.json();
+      })
+      .then(data => {
+        console.log('Response:', data); // مع httpbin سترى صدى البيانات المُرسلة
+        alert('تم الإرسال بنجاح'); 
+        document.getElementById('feedback-modal').style.display = 'none';
+      })
+      .catch(err => {
+        console.error(err);
+        alert('حدث خطأ أثناء الإرسال، حاول مرة أخرى');
+      });
+    });
+
+    document.getElementById('feedback-cancel').addEventListener('click', () => {
+      document.getElementById('feedback-modal').style.display = 'none';
+    });
+  </script>
+</body>
+</html>
