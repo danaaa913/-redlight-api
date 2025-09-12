@@ -1,0 +1,192 @@
+<!-- admin-login.html -->
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>🏛️ تسجيل الدخول - هيئة النزاهة</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+      color: #2c3e50;
+    }
+    
+    .login-container {
+      background: white;
+      padding: 40px;
+      border-radius: 15px;
+      box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+    
+    .logo {
+      font-size: 3em;
+      margin-bottom: 10px;
+    }
+    
+    h1 {
+      color: #2c3e50;
+      margin-bottom: 30px;
+      font-size: 1.5em;
+    }
+    
+    .input-group {
+      margin-bottom: 20px;
+      text-align: right;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #555;
+    }
+    
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 15px;
+      border: 2px solid #ecf0f1;
+      border-radius: 8px;
+      font-size: 16px;
+      transition: border-color 0.3s;
+      box-sizing: border-box;
+    }
+    
+    input:focus {
+      outline: none;
+      border-color: #3498db;
+    }
+    
+    .login-btn {
+      width: 100%;
+      padding: 15px;
+      background: #e74c3c;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    
+    .login-btn:hover {
+      background: #c0392b;
+    }
+    
+    .login-btn:disabled {
+      background: #bdc3c7;
+      cursor: not-allowed;
+    }
+    
+    .error-message {
+      background: #e74c3c;
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 15px 0;
+      display: none;
+    }
+    
+    .demo-info {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 20px;
+      font-size: 0.9em;
+      color: #666;
+      border-left: 4px solid #3498db;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="logo">🏛️</div>
+    <h1>هيئة النزاهة ومكافحة الفساد</h1>
+    
+    <form id="loginForm">
+      <div class="input-group">
+        <label for="username">اسم المستخدم:</label>
+        <input type="text" id="username" name="username" required>
+      </div>
+      
+      <div class="input-group">
+        <label for="password">كلمة المرور:</label>
+        <input type="password" id="password" name="password" required>
+      </div>
+      
+      <button type="submit" class="login-btn" id="loginBtn">
+        🔐 تسجيل الدخول
+      </button>
+      
+      <div id="errorMessage" class="error-message"></div>
+    </form>
+    
+    <div class="demo-info">
+      <strong>للعرض التوضيحي:</strong><br>
+      اسم المستخدم: admin<br>
+      كلمة المرور: integrity2025
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = 'https://redlight-api.onrender.com';
+
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const loginBtn = document.getElementById('loginBtn');
+      const errorDiv = document.getElementById('errorMessage');
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      
+      loginBtn.disabled = true;
+      loginBtn.textContent = '⏳ جاري تسجيل الدخول...';
+      errorDiv.style.display = 'none';
+      
+      try {
+        const response = await fetch(`${API_BASE}/api/admin/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ username, password })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          // حفظ token في localStorage
+          localStorage.setItem('adminToken', data.token);
+          localStorage.setItem('adminInfo', JSON.stringify(data.admin));
+          
+          // توجيه إلى لوحة التحكم
+          window.location.href = 'admin-dashboard.html';
+        } else {
+          throw new Error(data.error || 'فشل تسجيل الدخول');
+        }
+        
+      } catch (error) {
+        console.error('Login error:', error);
+        errorDiv.textContent = 'خطأ في تسجيل الدخول. تأكد من البيانات المدخلة.';
+        errorDiv.style.display = 'block';
+      } finally {
+        loginBtn.disabled = false;
+        loginBtn.textContent = '🔐 تسجيل الدخول';
+      }
+    });
+
+    // التحقق من وجود token مسبق
+    if (localStorage.getItem('adminToken')) {
+      window.location.href = 'admin-dashboard.html';
+    }
+  </script>
+</body>
+</html>
