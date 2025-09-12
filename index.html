@@ -61,14 +61,12 @@
     <p class="tagline">"الصمت لا يعني الرضى بل إنذار مبكر"</p>
     <button id="start-button">ابدأ الاستكشاف</button>
   </div>
-
   <!-- شريط البحث والخريطة -->
   <div id="search-bar" style="display:none;">
     <input id="search-input" type="text" placeholder="ابحث عن المؤسسة الحكومية..." />
     <button id="search-button">بحث</button>
   </div>
   <div id="map" style="display:none;"></div>
-
   <!-- صندوق الملاحظات -->
   <div id="feedback-modal">
     <div id="feedback-box">
@@ -80,21 +78,18 @@
       </div>
     </div>
   </div>
-
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
     let map, markers = [], currentInstitution = '';
-
-    // غيّر هذا لاحقًا إلى رابط خادمك الفعلي مع تمكين CORS
-    const USE_HTTPBIN = false; // اجعله false عند الجاهزية
-    const API_BASE = USE_HTTPBIN ? 'https://redlight-api.onrender.com' : ''; // ضع هنا دومين API مثل: https://api.yourdomain.com
-
+    
+    // ✅ رابط API المُصحح - يُرسل دائماً للخادم الحقيقي
+    const API_BASE = 'https://redlight-api.onrender.com';
+    
     function initMap() {
       map = L.map('map').setView([31.9454,35.9284],7);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
         attribution:'© OpenStreetMap'
       }).addTo(map);
-
       const institutions = [
         { name:'رئاسة الوزراء', coords:[31.9539,35.9106] },
         { name:'وزارة الداخلية', coords:[31.9522,35.9106] },
@@ -103,7 +98,6 @@
         { name:'وزارة الصحة', coords:[31.9622,35.8846] },
         { name:'وزارة المالية', coords:[31.9466,35.9321] }
       ];
-
       markers = institutions.map(inst => {
         const m = L.marker(inst.coords).addTo(map);
         m.bindPopup(
@@ -113,14 +107,14 @@
         return { name: inst.name, marker: m };
       });
     }
-
+    
     document.getElementById('start-button').addEventListener('click', () => {
       document.getElementById('landing').style.display = 'none';
       document.getElementById('search-bar').style.display = 'flex';
       document.getElementById('map').style.display = 'block';
       initMap();
     });
-
+    
     function performSearch() {
       const q = document.getElementById('search-input').value.trim();
       if (!q) return;
@@ -132,27 +126,35 @@
         alert('لم يتم العثور على المؤسسة المطلوبة');
       }
     }
+    
     document.getElementById('search-button').addEventListener('click', performSearch);
-    document.getElementById('search-input').addEventListener('keyup', e => { if (e.key==='Enter') performSearch(); });
-
+    document.getElementById('search-input').addEventListener('keyup', e => { 
+      if (e.key==='Enter') performSearch(); 
+    });
+    
     function openFeedbackForm(name) {
       currentInstitution = name;
       document.getElementById('feedback-title').textContent = `شارك تجربتك مع ${name}`;
       document.getElementById('feedback-text').value = '';
       document.getElementById('feedback-modal').style.display = 'flex';
     }
-
+    
+    // ✅ وظيفة الإرسال المُصححة
     document.getElementById('feedback-submit').addEventListener('click', () => {
       const t = document.getElementById('feedback-text').value.trim();
-      if (!t) { alert('يرجى كتابة تجربتك أولاً'); return; }
-
-      const url = USE_HTTPBIN ? `${API_BASE}/post` : `/api/feedback`; // عند الجاهزية اجعل USE_HTTPBIN=false
+      if (!t) { 
+        alert('يرجى كتابة تجربتك أولاً'); 
+        return; 
+      }
+      
+      // ✅ الآن يُرسل دائماً للخادم الحقيقي
+      const url = `${API_BASE}/api/feedback`;
       const payload = {
         institutionName: currentInstitution,
         timestamp: new Date().toISOString(),
         text: t
       };
-
+      
       fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -163,16 +165,17 @@
         return res.json();
       })
       .then(data => {
-        console.log('Response:', data); // مع httpbin سترى صدى البيانات المُرسلة
-        alert('تم الإرسال بنجاح'); 
+        console.log('Response:', data);
+        alert('تم الإرسال بنجاح! شكراً لك على مشاركة تجربتك'); 
         document.getElementById('feedback-modal').style.display = 'none';
+        document.getElementById('feedback-text').value = ''; // تنظيف النموذج
       })
       .catch(err => {
-        console.error(err);
-        alert('حدث خطأ أثناء الإرسال، حاول مرة أخرى');
+        console.error('خطأ في الإرسال:', err);
+        alert('حدث خطأ أثناء الإرسال، يرجى المحاولة مرة أخرى');
       });
     });
-
+    
     document.getElementById('feedback-cancel').addEventListener('click', () => {
       document.getElementById('feedback-modal').style.display = 'none';
     });
