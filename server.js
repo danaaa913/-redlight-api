@@ -1,154 +1,204 @@
-// server.js
-require('dotenv').config(); 
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const fetch = require('node-fetch'); // ✅ إضافة للتعامل مع Gemini API
+// إضافة في بداية server.js
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
-const app = express();
+// إضافة متغيرات البيئة الجديدة
+const JWT_SECRET = process.env.JWT_SECRET || 'redlight-secret-key';
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
 
-// خلال التطوير يمكن السماح للجميع، وفي الإنتاج قَيِّد origin إلى نطاق واجهتك
-app.use(cors({
-  origin: true, // يسمح لكل المواقع مؤقتاً
-  credentials: true
-}));
-
-app.use(express.json());
-
-// عدّل سلسلة الاتصال عند النشر (يفضَّل MongoDB Atlas عبر متغير بيئة)
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/redlight';
-mongoose.connect(MONGO_URI)
-  .then(() => console.log('✅ MongoDB connected'))
-  .catch(err => { console.error('❌ MongoDB error:', err); process.exit(1); });
-
-// ✅ نموذج البيانات المُحدَّث مع تحليل الذكاء الاصطناعي
-const feedbackSchema = new mongoose.Schema({
-  institutionName: { type: String, required: true },
-  timestamp:      { type: Date,   required: true },
-  text:           { type: String, required: true },
-  aiAnalysis: {    // ✅ إضافة جديدة لحفظ تحليل الذكاء الاصطناعي
-    corruption_score: Number,
-    fairness_score: Number,
-    nepotism_score: Number,
-    service_quality: Number,
-    sentiment: String,
-    main_issue: String,
-    keywords: [String],
-    confidence: Number
-  }
+// نموذج بيانات المسؤولين (مبسط)
+const adminSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true },
+  passwordHash: { type: String, required: true },
+  role: { type: String, default: 'admin' },
+  organization: { type: String, default: 'هيئة النزاهة' }
 }, { timestamps: true });
 
-const Feedback = mongoose.model('Feedback', feedbackSchema);
+const Admin = mongoose.model('Admin', adminSchema);
 
-// ✅ دالة تحليل النص بـ Google Gemini API
-async function analyzeIntegrityWithGemini(text, institutionName) {
-  const GEMINI_API_KEY = process.env.GEMINI_API_KEY; // ⚠️ تأكدي من إضافته في Render
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+// middleware للتحقق من المصادقة
+function authenticateAdmin(req, res, next) {
+  const token = req.header('Authorization')?.replace('Bearer ', '');
   
-  const prompt = `أنت محلل نزاهة حكومية متخصص في المؤسسات الأردنية.
-
-حلل هذا النص من مواطن عن "${institutionName}":
-"${text}"
-
-أعط تقييماً دقيقاً بصيغة JSON فقط:
-{
-  "corruption_score": رقم من 0-100,
-  "fairness_score": رقم من 0-100,
-  "nepotism_score": رقم من 0-100,
-  "service_quality": رقم من 0-100,
-  "sentiment": "positive/neutral/negative",
-  "main_issue": "وصف موجز للمشكلة",
-  "keywords": ["كلمة1", "كلمة2"],
-  "confidence": رقم من 0-100
-}`;
+  if (!token) {
+    return res.status(401).json({ error: 'Access denied. No token provided.' });
+  }
 
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': GEMINI_API_KEY
-      },
-      body: JSON.stringify({
-        contents: [
-          { parts: [{ text: prompt }] }
-        ]
-      })
-    });
-
-    const data = await response.json();
-    const aiResponse = data.candidates[0].content.parts[0].text;
-    
-    // استخراج JSON من الاستجابة
-    const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-    
-    throw new Error('لم يتم العثور على JSON في الاستجابة');
-    
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.admin = decoded;
+    next();
   } catch (error) {
-    console.error('❌ خطأ في Gemini API:', error);
-    return {
-      corruption_score: 0,
-      fairness_score: 50,
-      nepotism_score: 0,
-      service_quality: 50,
-      sentiment: "neutral",
-      main_issue: "فشل التحليل",
-      keywords: [],
-      confidence: 0
-    };
+    res.status(400).json({ error: 'Invalid token.' });
   }
 }
 
-// ✅ نقطة الاستقبال المُحدَّثة مع التحليل الذكي
-app.post('/api/feedback', async (req, res) => {
+// API تسجيل الدخول للمسؤولين
+app.post('/api/admin/login', async (req, res) => {
   try {
-    const { institutionName, timestamp, text } = req.body;
-    if (!institutionName || !timestamp || !text) {
-      return res.status(400).json({ error: 'Missing fields' });
-    }
-
-    console.log(`🤖 بدء تحليل رسالة عن ${institutionName}...`);
-
-    // ✅ تحليل النص بالذكاء الاصطناعي
-    const aiAnalysis = await analyzeIntegrityWithGemini(text, institutionName);
-
-    console.log('✅ تم التحليل:', aiAnalysis);
-
-    // حفظ البيانات مع التحليل
-    const doc = await Feedback.create({ 
-      institutionName, 
-      timestamp, 
-      text, 
-      aiAnalysis  // ✅ إضافة التحليل
-    });
+    const { username, password } = req.body;
     
-    // حساب مؤشر النزاهة الإجمالي
-    const integrityScore = Math.round(
-      ((aiAnalysis.fairness_score + aiAnalysis.service_quality) / 2) - 
-      ((aiAnalysis.corruption_score + aiAnalysis.nepotism_score) / 2) + 50
-    );
-
-    return res.json({ 
-      success: true, 
-      id: doc._id,
-      analysis: aiAnalysis,
-      integrityScore: Math.max(0, Math.min(100, integrityScore)),
-      message: `تم تحليل رسالتك بالذكاء الاصطناعي! مؤشر النزاهة للمؤسسة: ${Math.max(0, Math.min(100, integrityScore))}%`
-    });
-  } catch (e) {
-    console.error('❌ خطأ في معالجة التغذية:', e);
-    return res.status(500).json({ error: 'Server error' });
+    // مسؤول افتراضي مؤقت
+    if (username === 'admin' && password === 'integrity2025') {
+      const token = jwt.sign(
+        { username: 'admin', role: 'admin', organization: 'هيئة النزاهة' },
+        JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+      
+      return res.json({
+        success: true,
+        token,
+        admin: {
+          username: 'admin',
+          role: 'admin',
+          organization: 'هيئة النزاهة'
+        }
+      });
+    }
+    
+    return res.status(401).json({ error: 'Invalid credentials' });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
-// ✅ API جديد للحصول على إحصائيات ذكية
-app.get('/api/analytics/overview', async (req, res) => {
+// API للحصول على ملخص ذكي لمؤسسة معينة
+app.get('/api/admin/institution/:name/summary', authenticateAdmin, async (req, res) => {
   try {
-    console.log('📊 بدء تحليل الإحصائيات...');
+    const institutionName = decodeURIComponent(req.params.name);
+    console.log(`📊 طلب ملخص ذكي لـ: ${institutionName}`);
 
+    const feedbacks = await Feedback.find({ institutionName }).sort({ createdAt: -1 });
+    
+    if (feedbacks.length === 0) {
+      return res.json({
+        institution: institutionName,
+        summary: 'لا توجد بيانات متاحة لهذه المؤسسة',
+        totalFeedbacks: 0,
+        scores: null
+      });
+    }
+
+    // حساب المتوسطات والإحصائيات
+    const avgScores = {
+      corruption: Math.round(feedbacks.reduce((sum, f) => sum + (f.aiAnalysis?.corruption_score || 0), 0) / feedbacks.length),
+      fairness: Math.round(feedbacks.reduce((sum, f) => sum + (f.aiAnalysis?.fairness_score || 50), 0) / feedbacks.length),
+      nepotism: Math.round(feedbacks.reduce((sum, f) => sum + (f.aiAnalysis?.nepotism_score || 0), 0) / feedbacks.length),
+      service: Math.round(feedbacks.reduce((sum, f) => sum + (f.aiAnalysis?.service_quality || 50), 0) / feedbacks.length)
+    };
+
+    // تجميع النصوص لإنشاء ملخص ذكي
+    const allTexts = feedbacks.map(f => f.text).join('\n\n---\n\n');
+    
+    // طلب ملخص من Gemini
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+    
+    const summaryPrompt = `أنت محلل نزاهة خبير. لديك ${feedbacks.length} رسائل من المواطنين عن "${institutionName}".
+
+النصوص:
+${allTexts}
+
+قم بإنشاء تقرير تنفيذي شامل يتضمن:
+1. ملخص الوضع العام للمؤسسة
+2. أبرز المشاكل المتكررة
+3. نقاط القوة (إن وجدت)
+4. التوصيات العاجلة لهيئة النزاهة
+5. مستوى الخطورة والأولوية
+
+اكتب التقرير بشكل مهني واضح ومفيد لصناع القرار.`;
+
+    let aiSummary = 'ملخص غير متوفر';
+    try {
+      const summaryResponse = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': GEMINI_API_KEY
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: summaryPrompt }] }]
+        })
+      });
+
+      const summaryData = await summaryResponse.json();
+      aiSummary = summaryData.candidates[0].content.parts[0].text;
+    } catch (summaryError) {
+      console.error('خطأ في إنشاء الملخص الذكي:', summaryError);
+    }
+
+    // تحليل أنواع المشاكل
+    const issueFrequency = {};
+    feedbacks.forEach(f => {
+      const issue = f.aiAnalysis?.main_issue || 'غير محدد';
+      issueFrequency[issue] = (issueFrequency[issue] || 0) + 1;
+    });
+
+    const topIssues = Object.entries(issueFrequency)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 5)
+      .map(([issue, count]) => ({ issue, count, percentage: Math.round((count / feedbacks.length) * 100) }));
+
+    // حساب مؤشر النزاهة الإجمالي
+    const integrityScore = Math.max(0, Math.min(100, 
+      Math.round(((avgScores.fairness + avgScores.service) / 2) - ((avgScores.corruption + avgScores.nepotism) / 2) + 50)
+    ));
+
+    // تحديد مستوى المخاطر
+    let riskLevel = 'منخفض';
+    let riskColor = '#27ae60';
+    if (integrityScore < 30 || avgScores.corruption > 70) {
+      riskLevel = 'عالي جداً';
+      riskColor = '#e74c3c';
+    } else if (integrityScore < 50 || avgScores.corruption > 50) {
+      riskLevel = 'عالي';
+      riskColor = '#f39c12';
+    } else if (integrityScore < 70) {
+      riskLevel = 'متوسط';
+      riskColor = '#f39c12';
+    }
+
+    const summary = {
+      institution: institutionName,
+      reportDate: new Date().toISOString(),
+      totalFeedbacks: feedbacks.length,
+      dateRange: {
+        from: feedbacks[feedbacks.length - 1].createdAt,
+        to: feedbacks[0].createdAt
+      },
+      integrityScore,
+      riskLevel,
+      riskColor,
+      scores: avgScores,
+      sentiment: {
+        positive: feedbacks.filter(f => f.aiAnalysis?.sentiment === 'positive').length,
+        negative: feedbacks.filter(f => f.aiAnalysis?.sentiment === 'negative').length,
+        neutral: feedbacks.filter(f => f.aiAnalysis?.sentiment === 'neutral').length
+      },
+      topIssues,
+      aiGeneratedSummary: aiSummary,
+      recentFeedbacks: feedbacks.slice(0, 3).map(f => ({
+        text: f.text.substring(0, 100) + '...',
+        sentiment: f.aiAnalysis?.sentiment || 'محايد',
+        date: f.createdAt
+      }))
+    };
+
+    console.log(`✅ تم إنشاء ملخص ذكي لـ ${institutionName} - مؤشر النزاهة: ${integrityScore}%`);
+    
+    res.json(summary);
+
+  } catch (error) {
+    console.error('خطأ في إنشاء الملخص:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// API للحصول على قائمة المؤسسات للمسؤولين
+app.get('/api/admin/institutions', authenticateAdmin, async (req, res) => {
+  try {
     const institutions = await Feedback.aggregate([
       {
         $group: {
@@ -156,123 +206,46 @@ app.get('/api/analytics/overview', async (req, res) => {
           totalFeedbacks: { $sum: 1 },
           avgCorruption: { $avg: '$aiAnalysis.corruption_score' },
           avgFairness: { $avg: '$aiAnalysis.fairness_score' },
-          avgNepotism: { $avg: '$aiAnalysis.nepotism_score' },
-          avgService: { $avg: '$aiAnalysis.service_quality' },
-          positiveCount: {
-            $sum: { $cond: [{ $eq: ['$aiAnalysis.sentiment', 'positive'] }, 1, 0] }
-          },
-          negativeCount: {
-            $sum: { $cond: [{ $eq: ['$aiAnalysis.sentiment', 'negative'] }, 1, 0] }
-          },
-          neutralCount: {
-            $sum: { $cond: [{ $eq: ['$aiAnalysis.sentiment', 'neutral'] }, 1, 0] }
-          },
-          lastUpdate: { $max: '$createdAt' }
+          lastFeedback: { $max: '$createdAt' }
         }
-      }
+      },
+      {
+        $project: {
+          name: '$_id',
+          totalFeedbacks: 1,
+          integrityScore: {
+            $max: [0, {
+              $min: [100, {
+                $add: [
+                  { $divide: [{ $add: ['$avgFairness', 50] }, 2] },
+                  { $subtract: [50, { $divide: [{ $add: ['$avgCorruption', 0] }, 2] }] }
+                ]
+              }]
+            }]
+          },
+          lastActivity: '$lastFeedback',
+          _id: 0
+        }
+      },
+      { $sort: { integrityScore: 1 } } // الأسوأ أولاً
     ]);
 
-    const processedInstitutions = institutions.map(inst => {
-      const integrityScore = Math.round(
-        ((inst.avgFairness + inst.avgService) / 2) - 
-        ((inst.avgCorruption + inst.avgNepotism) / 2) + 50
-      );
-      
-      return {
-        name: inst._id,
-        totalFeedbacks: inst.totalFeedbacks,
-        integrityScore: Math.max(0, Math.min(100, integrityScore)),
-        corruptionLevel: Math.round(inst.avgCorruption || 0),
-        fairnessLevel: Math.round(inst.avgFairness || 50),
-        nepotismLevel: Math.round(inst.avgNepotism || 0),
-        serviceQuality: Math.round(inst.avgService || 50),
-        positiveRatio: Math.round((inst.positiveCount / inst.totalFeedbacks) * 100),
-        negativeRatio: Math.round((inst.negativeCount / inst.totalFeedbacks) * 100),
-        neutralRatio: Math.round((inst.neutralCount / inst.totalFeedbacks) * 100),
-        lastUpdate: inst.lastUpdate
-      };
-    });
-
-    const rankedInstitutions = processedInstitutions.sort((a, b) => b.integrityScore - a.integrityScore);
-
-    const totalFeedbacks = institutions.reduce((sum, inst) => sum + inst.totalFeedbacks, 0);
-    const avgIntegrity = Math.round(
-      processedInstitutions.reduce((sum, inst) => sum + inst.integrityScore, 0) / processedInstitutions.length || 0
-    );
-    const criticalAlerts = processedInstitutions.filter(inst => 
-      inst.integrityScore < 30 || inst.corruptionLevel > 70 || inst.nepotismLevel > 70
-    ).length;
-
-    console.log(`📈 تم تحليل ${institutions.length} مؤسسة بإجمالي ${totalFeedbacks} رسالة`);
-
     res.json({
-      totalFeedbacks,
-      totalInstitutions: institutions.length,
-      avgIntegrity,
-      alertsCount: criticalAlerts,
-      rankedInstitutions,
-      topPerforming: rankedInstitutions.slice(0, 5),
-      needsAttention: rankedInstitutions.filter(inst => inst.integrityScore < 40),
-      sentimentData: {
-        positive: processedInstitutions.reduce((sum, inst) => sum + (inst.positiveRatio * inst.totalFeedbacks / 100), 0),
-        negative: processedInstitutions.reduce((sum, inst) => sum + (inst.negativeRatio * inst.totalFeedbacks / 100), 0),
-        neutral: processedInstitutions.reduce((sum, inst) => sum + (inst.neutralRatio * inst.totalFeedbacks / 100), 0)
+      institutions: institutions.map(inst => ({
+        ...inst,
+        integrityScore: Math.round(inst.integrityScore),
+        priority: inst.integrityScore < 40 ? 'عالية' : inst.integrityScore < 70 ? 'متوسطة' : 'منخفضة'
+      })),
+      summary: {
+        total: institutions.length,
+        highPriority: institutions.filter(inst => inst.integrityScore < 40).length,
+        mediumPriority: institutions.filter(inst => inst.integrityScore >= 40 && inst.integrityScore < 70).length,
+        lowPriority: institutions.filter(inst => inst.integrityScore >= 70).length
       }
     });
 
   } catch (error) {
-    console.error('❌ خطأ في الإحصائيات:', error);
+    console.error('خطأ في جلب المؤسسات:', error);
     res.status(500).json({ error: 'Server error' });
   }
-});
-
-// ✅ API للحصول على تفاصيل مؤسسة معينة
-app.get('/api/analytics/institution/:name', async (req, res) => {
-  try {
-    const institutionName = req.params.name;
-    
-    const feedbacks = await Feedback.find({ institutionName }).sort({ createdAt: -1 });
-    
-    if (feedbacks.length === 0) {
-      return res.json({ error: 'لا توجد بيانات لهذه المؤسسة' });
-    }
-
-    const analysis = {
-      institutionName,
-      totalFeedbacks: feedbacks.length,
-      avgScores: {
-        corruption: Math.round(feedbacks.reduce((sum, f) => sum + (f.aiAnalysis?.corruption_score || 0), 0) / feedbacks.length),
-        fairness: Math.round(feedbacks.reduce((sum, f) => sum + (f.aiAnalysis?.fairness_score || 50), 0) / feedbacks.length),
-        nepotism: Math.round(feedbacks.reduce((sum, f) => sum + (f.aiAnalysis?.nepotism_score || 0), 0) / feedbacks.length),
-        service: Math.round(feedbacks.reduce((sum, f) => sum + (f.aiAnalysis?.service_quality || 50), 0) / feedbacks.length)
-      },
-      recentFeedbacks: feedbacks.slice(0, 10).map(f => ({
-        text: f.text,
-        sentiment: f.aiAnalysis?.sentiment || 'neutral',
-        mainIssue: f.aiAnalysis?.main_issue || 'غير محدد',
-        date: f.createdAt
-      }))
-    };
-
-    res.json(analysis);
-
-  } catch (error) {
-    console.error('❌ خطأ في تحليل المؤسسة:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// نقطة الصحّة
-app.get('/health', (req, res) => res.json({ 
-  ok: true, 
-  timestamp: new Date().toISOString(),
-  aiEnabled: !!process.env.GEMINI_API_KEY 
-}));
-
-// مهم: الاستماع لمنفذ البيئة لتوافق منصّات النشر
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 RedLight AI API running on port ${PORT}`);
-  console.log(`🤖 AI Analysis: ${process.env.GEMINI_API_KEY ? 'ENABLED' : 'DISABLED'}`);
-  console.log(`🗄️  Database: ${MONGO_URI.includes('mongodb.net') ? 'MongoDB Atlas' : 'Local MongoDB'}`);
 });
