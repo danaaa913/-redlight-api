@@ -1,4 +1,4 @@
-// server.js - إصدار مبسط وآمن
+
 require('dotenv').config(); 
 const express = require('express');
 const mongoose = require('mongoose');
@@ -21,7 +21,7 @@ mongoose.connect(MONGO_URI)
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => { 
     console.error('❌ MongoDB error:', err); 
-    // لا تتوقف عند خطأ قاعدة البيانات
+   
   });
 
 // نموذج البيانات
@@ -43,7 +43,7 @@ const feedbackSchema = new mongoose.Schema({
 
 const Feedback = mongoose.model('Feedback', feedbackSchema);
 
-// دالة تحليل النص بـ Gemini (محمية من الأخطاء)
+// دالة تحليل النص بـ Gemini 
 async function analyzeIntegrityWithGemini(text, institutionName) {
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   
@@ -113,7 +113,7 @@ app.post('/api/admin/login', async (req, res) => {
     const { username, password } = req.body;
     
     if (username === 'admin' && password === 'integrity2025') {
-      // token بسيط
+     
       const simpleToken = Buffer.from(`admin:${Date.now()}`).toString('base64');
       
       return res.json({
