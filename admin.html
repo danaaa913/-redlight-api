@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>🏛️ لوحة تحكم هيئة النزاهة</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { 
+      font-family: 'Segoe UI', Arial, sans-serif; 
+      margin: 0; background: #f8f9fa; color: #2c3e50; 
+    }
+    .container { 
+      max-width: 500px; margin: 50px auto; padding: 30px; 
+      background: white; border-radius: 15px; 
+      box-shadow: 0 8px 25px rgba(0,0,0,0.1); text-align: center; 
+    }
+    .logo { font-size: 3em; margin-bottom: 10px; }
+    h1 { color: #2c3e50; margin-bottom: 30px; }
+    .input-group { margin-bottom: 20px; text-align: right; }
+    label { display: block; margin-bottom: 8px; font-weight: 600; color: #555; }
+    input { 
+      width: 100%; padding: 15px; border: 2px solid #ecf0f1; 
+      border-radius: 8px; font-size: 16px; box-sizing: border-box; 
+    }
+    input:focus { outline: none; border-color: #3498db; }
+    button { 
+      width: 100%; padding: 15px; background: #e74c3c; color: white; 
+      border: none; border-radius: 8px; font-size: 16px; cursor: pointer; 
+      margin: 10px 0; font-weight: 600; transition: background 0.3s; 
+    }
+    button:hover { background: #c0392b; }
+    button:disabled { background: #bdc3c7; cursor: not-allowed; }
+    .success { 
+      background: #d4edda; color: #155724; padding: 15px; 
+      border-radius: 8px; margin: 20px 0; border: 1px solid #c3e6cb; 
+    }
+    .error { 
+      background: #f8d7da; color: #721c24; padding: 15px; 
+      border-radius: 8px; margin: 20px 0; border: 1px solid #f5c6cb; 
+    }
+    .demo-info { 
+      background: #e9ecef; padding: 15px; border-radius: 8px; 
+      margin-top: 20px; font-size: 0.9em; color: #666; 
+    }
+    .dashboard { display: none; }
+    .stats-grid { 
+      display: grid; grid-template-columns: 1fr 1fr; 
+      gap: 15px; margin: 20px 0; 
+    }
+    .stat-card { 
+      background: #f8f9fa; padding: 20px; border-radius: 10px; 
+      text-align: center; 
+    }
+    .stat-number { 
+      font-size: 2em; font-weight: bold; margin-bottom: 5px; 
+    }
+    .high-priority { color: #e74c3c; }
+    .medium-priority { color: #f39c12; }
+    .low-priority { color: #27ae60; }
+    .institution-list { 
+      max-height: 300px; overflow-y: auto; 
+      border: 1px solid #ddd; border-radius: 8px; padding: 10px; 
+    }
+    .institution-item { 
+      padding: 10px; margin: 5px 0; border-radius: 5px; 
+      color: white; font-weight: bold; 
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- صفحة تسجيل الدخول -->
+    <div id="loginSection">
+      <div class="logo">🏛️</div>
+      <h1>هيئة النزاهة ومكافحة الفساد</h1>
+      
+      <div class="input-group">
+        <label for="username">اسم المستخدم:</label>
+        <input type="text" id="username" required>
+      </div>
+      
+      <div class="input-group">
+        <label for="password">كلمة المرور:</label>
+        <input type="password" id="password" required>
+      </div>
+      
+      <button onclick="login()" id="loginBtn">🔐 تسجيل الدخول</button>
+      
+      <div class="demo-info">
+        <strong>للاختبار:</strong><br>
+        اسم المستخدم: admin<br>
+        كلمة المرور: integrity2025
+      </div>
+      
+      <div id="loginMessage"></div>
+    </div>
+    
+    <!-- لوحة التحكم -->
+    <div id="dashboardSection" class="dashboard">
+      <h1>🏛️ مرحباً بك في لوحة التحكم</h1>
+      
+      <div class="success">✅ تم تسجيل الدخول بنجاح!</div>
+      
+      <button onclick="loadInstitutions()">📊 عرض المؤسسات</button>
+      <button onclick="testAPI()">🔌 اختبار النظام</button>
+      <button onclick="showSystemInfo()">💡 معلومات المشروع</button>
+      <button onclick="logout()">🚪 خروج</button>
+      
+      <div id="dashboardResults"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = 'https://redlight-api.onrender.com';
+    let adminToken = null;
+
+    async function login() {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const messageDiv = document.getElementById('loginMessage');
+      const loginBtn = document.getElementById('loginBtn');
+      
+      if (!username || !password) {
+        messageDiv.innerHTML = '<div class="error">⚠️ يرجى إدخال اسم المستخدم وكلمة المرور</div>';
+        return;
+      }
+      
+      loginBtn.disabled = true;
+      loginBtn.textContent = '⏳ جاري تسجيل الدخول...';
+      messageDiv.innerHTML = '';
+      
+      try {
+        const response = await fetch(`${API_BASE}/api/admin/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          adminToken = data.token;
+          document.getElementById('loginSection').style.display = 'none';
+          document.getElementById('dashboardSection').style.display = 'block';
+        } else {
+          messageDiv.innerHTML = '<div class="error">❌ بيانات دخول خاطئة</div>';
+        }
+      } catch (error) {
+        messageDiv.innerHTML = '<div class="error">❌ خطأ في الاتصال بالخادم</div>';
+        console.error('خطأ تسجيل الدخول:', error);
+      } finally {
+        loginBtn.disabled = false;
+        loginBtn.textContent = '🔐 تسجيل الدخول';
+      }
+    }
+
+    async function loadInstitutions() {
+      const resultsDiv = document.getElementById('dashboardResults');
+      resultsDiv.innerHTML = '<div style="color: #007bff; text-align: center;">⏳ جاري تحميل إحصائيات المؤسسات...</div>';
+      
+      try {
+        const response = await fetch(`${API_BASE}/api/admin/institutions`, {
+          headers: { 'Authorization': `Bearer ${adminToken}` }
+        });
+        
+        const data = await response.json();
+        
+        let html = '<div class="success"><h3>📊 إحصائيات المؤسسات</h3>';
+        html += '<div class="stats-grid">';
+        html += `<div class="stat-card"><div class="stat-number">${data.summary.total}</div><div>إجمالي المؤسسات</div></div>`;
+        html += `<div class="stat-card"><div class="stat-number high-priority">${data.summary.highPriority}</div><div>عالية الأولوية</div></div>`;
+        html += `<div class="stat-card"><div class="stat-number medium-priority">${data.summary.mediumPriority}</div><div>متوسطة الأولوية</div></div>`;
+        html += `<div class="stat-card"><div class="stat-number low-priority">${data.summary.lowPriority}</div><div>منخفضة الأولوية</div></div>`;
+        html += '</div></div>';
+        
+        html += '<h3>🏢 قائمة المؤسسات:</h3><div class="institution-list">';
+        data.institutions.forEach(inst => {
+          const bgColor = inst.priority === 'عالية' ? '#e74c3c' : 
+                          inst.priority === 'متوسطة' ? '#f39c12' : '#27ae60';
+          html += `<div class="institution-item" style="background: ${bgColor};">`;
+          html += `${inst.name} - نزاهة: ${inst.integrityScore}% - أولوية: ${inst.priority}`;
+          html += `</div>`;
+        });
+        html += '</div>';
+        
+        resultsDiv.innerHTML = html;
+      } catch (error) {
+        resultsDiv.innerHTML = '<div class="error">❌ خطأ في تحميل البيانات</div>';
+        console.error('خطأ تحميل المؤسسات:', error);
+      }
+    }
+
+    async function testAPI() {
+      const resultsDiv = document.getElementById('dashboardResults');
+      resultsDiv.innerHTML = '<div style="color: #007bff; text-align: center;">⏳ اختبار حالة النظام...</div>';
+      
+      try {
+        const response = await fetch(`${API_BASE}/health`);
+        const data = await response.json();
+        
+        resultsDiv.innerHTML = `
+          <div class="success">
+            <h3>✅ نتائج فحص النظام</h3>
+            <p><strong>حالة الخادم:</strong> ${data.ok ? '✅ ممتاز' : '❌ خطأ'}</p>
+            <p><strong>الذكاء الاصطناعي:</strong> ${data.aiEnabled ? '🤖 مفعل' : '❌ معطل'}</p>
+            <p><strong>قاعدة البيانات:</strong> ${data.mongoConnected ? '🗄️ متصلة' : '❌ منقطعة'}</p>
+            <p><strong>وقت الفحص:</strong> ${new Date().toLocaleString('ar')}</p>
+            <p style="color: #27ae60; font-weight: bold;">🎉 النظام يعمل بكفاءة عالية!</p>
+          </div>
+        `;
+      } catch (error) {
+        resultsDiv.innerHTML = '<div class="error">❌ فشل الاتصال بالخادم</div>';
+      }
+    }
+
+    function showSystemInfo() {
+      document.getElementById('dashboardResults').innerHTML = `
+        <div class="success">
+          <h3>💡 معلومات نظام RedLight AI</h3>
+          <p><strong>🎯 الهدف:</strong> مراقبة النزاهة في المؤسسات الحكومية الأردنية</p>
+          <p><strong>🤖 التقنية:</strong> ذكاء اصطناعي متقدم + تحليل النصوص العربية</p>
+          <p><strong>📊 المخرجات:</strong> مؤشرات نزاهة دقيقة وموضوعية</p>
+          <p><strong>🏆 الإنجاز:</strong> أول نظام من نوعه في الأردن</p>
+          <p><strong>🚀 الحالة:</strong> جاهز للتطبيق والاستثمار المؤسسي</p>
+          <p><strong>📈 القيمة:</strong> حل عملي لتعزيز الشفافية ومكافحة الفساد</p>
+        </div>
+      `;
+    }
+
+    function logout() {
+      adminToken = null;
+      document.getElementById('loginSection').style.display = 'block';
+      document.getElementById('dashboardSection').style.display = 'none';
+      document.getElementById('dashboardResults').innerHTML = '';
+      document.getElementById('loginMessage').innerHTML = '';
+      document.getElementById('username').value = '';
+      document.getElementById('password').value = '';
+    }
+
+    // إضافة تسجيل دخول عبر Enter
+    document.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter' && document.getElementById('loginSection').style.display !== 'none') {
+        login();
+      }
+    });
+  </script>
+</body>
+</html>
